@@ -90,6 +90,8 @@ def doc_eng_traslation(text):
 
 def Summary_laguage(documents):
     
+    #Language detection function with polyglot
+
     new_series = []
 
     doc_Sum = Punctuation_Removal(str(documents.Summary))
