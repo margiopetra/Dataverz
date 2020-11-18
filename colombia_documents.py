@@ -280,6 +280,9 @@ print(data.shape)
 
 
 # %%
+
+#Change vectors into shape (number of docs, number of dimentions)
+
 doc_vectors_array = np.array(data["Summary Vectors"])
 print(doc_vectors_array.shape)
 doc_vectors_array = np.vstack(doc_vectors_array)
