@@ -4,7 +4,6 @@ import pandas as pd
 import re
 import datetime
 
-
 import zipfile
 import pickle as pkl
 
@@ -18,13 +17,10 @@ from nltk.corpus import stopwords
 from string import punctuation
 
 import matplotlib.pyplot as plt
-#%%
 from googletrans import Translator
 
 from polyglot.detect import Detector
 from polyglot.text import Text
-
-#%%
 
 from sklearn.linear_model import LogisticRegression
 from sklearn import model_selection
@@ -34,11 +30,10 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score
 
-#%%
 from sklearn.model_selection import train_test_split
 from sklearn import linear_model
 
-#%%
+ #%%
 # open zipfile and read csv
 
 # archive = zipfile.ZipFile("C://Users//Maria Petra//internship//ColombiaDocs//ColombiaDocs.zip",'r')
@@ -162,6 +157,8 @@ def Document_to_Vector (data):
     return np.sum(vec, axis=0)
     # return np.mean(vec, axis=0)
 
+#%%
+
 
 #%%
  # Some statistics about the Citation Count column
@@ -178,11 +175,6 @@ citation_hight = documents[documents['Citation Count'] > 9]
 print("Citation low",len(citation_low))
 print("Citation medium",len(citation_medium))
 print("Citation high",len(citation_hight))
-
-
-
-#%%
-# data_partition["Norm Citation Count"] = norm_citation_count(data_partition)
 
 #%%
 documents["Norm Citation Count"] = documents.apply(norm_citation_count, axis = 1)
@@ -258,7 +250,6 @@ data["Summary Preprocessing"] = data["Summary"].apply(Preprocessing)
 print(data["Summary Preprocessing"].iloc[1])
 
 
-
 # Doc2Vec
 
 # %%
@@ -277,8 +268,6 @@ data = data[data['shapes']==(300,)]
 print(data.shape)
 
 
-
-
 # %%
 
 #Change vectors into shape (number of docs, number of dimentions)
@@ -288,7 +277,39 @@ print(doc_vectors_array.shape)
 doc_vectors_array = np.vstack(doc_vectors_array)
 print(doc_vectors_array.shape)
 
+#%%
+#mean vectors per year
+mean_year_df =  data
+mean_year_df = mean_year_df.groupby('Year').apply(lambda x: np.mean(x['Summary Vectors'],axis=0)).reset_index()
+mean_year_df.reset_index(drop=True, inplace=True)
+print(mean_year_df)
 
+#%%
+
+#%%
+
+#mean vectors per top 20 Bibtex Venue Name
+
+n=20
+top_20_venue = data['Bibtex Venue Name'].value_counts()[:n].index.tolist()
+print(top_20_venue)
+#%%
+mean_venue_df = data
+mean_venue_df = mean_venue_df.groupby('Bibtex Venue Name').apply(lambda x: np.mean(x['Summary Vectors'],axis=0)).reset_index()
+print(mean_venue_df)
+
+#%%
+mean_venue_df = mean_venue_df[mean_venue_df['Bibtex Venue Name'].isin(top_20_venue)]
+mean_venue_df.reset_index(drop=True, inplace=True)
+print(mean_venue_df)
+
+#%%
+mean_venue_df['Bibtex Venue Name']= mean_venue_df['Bibtex Venue Name'].astype("category")
+mean_venue_df['Bibtex Venue Name'].cat.set_categories(top_20_venue, inplace=True)
+print(mean_venue_df['Bibtex Venue Name'])
+mean_venue_df = mean_venue_df.sort_values(['Bibtex Venue Name'])
+mean_venue_df.reset_index(drop=True, inplace=True)
+print(mean_venue_df)
 
 #Classification
 #%%
