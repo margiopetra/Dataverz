@@ -1,6 +1,7 @@
 # %%
 import numpy as np
 import pandas as pd
+from pandas.plotting import table
 import re
 import datetime
 
@@ -8,11 +9,10 @@ import zipfile
 import pickle as pkl
 
 import gensim
-from gensim import utils
-from gensim import downloader
+from gensim import utils,downloader
 
-from nltk import word_tokenize
-from nltk import download
+
+from nltk import word_tokenize,download
 from nltk.corpus import stopwords
 from string import punctuation
 
@@ -23,15 +23,13 @@ from polyglot.detect import Detector
 from polyglot.text import Text
 
 from sklearn.linear_model import LogisticRegression
-from sklearn import model_selection
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import r2_score
-
+from sklearn import model_selection,linear_model
+from sklearn.metrics import plot_confusion_matrix,classification_report,confusion_matrix,accuracy_score,mean_squared_error,r2_score
 from sklearn.model_selection import train_test_split
-from sklearn import linear_model
+
+import csv
+
+from bert_serving.client import BertClient
 
  #%%
 # open zipfile and read csv
@@ -51,33 +49,34 @@ with open('docs.pkl','rb') as handle:
     documents = pkl.load(handle)
 
 
-#%%
-
 # Docment translation with googletrans API
 #%%
 def Punctuation_Removal(text):
     text = re.sub('[%s]' % re.escape(punctuation), '', text)
     return text
 
-def doc_eng_traslation(text):
+def doc_eng_traslation(documents):
 
     # The function detects the language of a text and traslates it
     # in english if case it is not in english
 
+    doc = []
+
+    text = str(documents.Summary)
     translator = Translator()  
     d = translator.detect(text)
 
     if d.lang=='en' in text:
-        doc = text
+        doc.append(text) 
     else:
         try:
             tr_text =  translator.translate(text, dest='en')
             tr_text = tr_text.text
-            doc = (tr_text)
+            doc.append(tr_text)
         except Exception as e:
             print(str(e))
 
-    return doc
+    return np.array(doc)
 
 
 #%%
@@ -104,6 +103,7 @@ download('punkt')
 download('stopwords')
 
 stop_words = stopwords.words('english')
+
 
 
 # %%
@@ -157,8 +157,6 @@ def Document_to_Vector (data):
     return np.sum(vec, axis=0)
     # return np.mean(vec, axis=0)
 
-#%%
-
 
 #%%
  # Some statistics about the Citation Count column
@@ -177,13 +175,16 @@ print("Citation medium",len(citation_medium))
 print("Citation high",len(citation_hight))
 
 #%%
+
+
 documents["Norm Citation Count"] = documents.apply(norm_citation_count, axis = 1)
+
+
 #%%
 print(documents["Norm Citation Count"] .shape)
 print(documents['Norm Citation Count'].describe())
 
 #%%
-from pandas.plotting import table
 
 fig, ax = plt.subplots(1, 1)
 
@@ -236,9 +237,15 @@ data.loc[data["Summary"].isnull(),'Summary'] = data["Title"]
 
 #%%
 data["Summary Language"] = data.apply(Summary_laguage, axis = 1)
+
 #%%
+non_en_docs = data[data['Summary Language'] != "en"]
 data = data[data['Summary Language'] == "en"]
 
+#%%
+
+non_en_docs["Summary Translation"] = non_en_docs.apply(doc_eng_traslation, axis = 1)
+non_en_docs["Summary Translation"] 
 #%%
 print(data.shape)
 print(documents.shape)
@@ -257,15 +264,19 @@ model = gensim.downloader.load('glove-wiki-gigaword-300')
 
 
 #%%
-data["Summary Vectors"] = data["Summary"].apply(Document_to_Vector)
+data["Summary Vectors"] = data["Summary Preprocessing"].apply(Document_to_Vector)
 
+#%%
+bc = BertClient()
+
+data["Summary BERT"] = [ bc.encode(row, is_tokenized=True) for row in data["Summary Preprocessing"]]
 #%%
 
 
-data['shapes'] = [x.shape for x in data["Summary Vectors"].values]
-print(data.shape)
-data = data[data['shapes']==(300,)]
-print(data.shape)
+# data['shapes'] = [x.shape for x in data["Summary Vectors"].values]
+# print(data.shape)
+# data = data[data['shapes']==(300,)]
+# print(data.shape)
 
 
 # %%
@@ -284,7 +295,6 @@ mean_year_df = mean_year_df.groupby('Year').apply(lambda x: np.mean(x['Summary V
 mean_year_df.reset_index(drop=True, inplace=True)
 print(mean_year_df)
 
-#%%
 
 #%%
 
@@ -299,21 +309,63 @@ mean_venue_df = mean_venue_df.groupby('Bibtex Venue Name').apply(lambda x: np.me
 print(mean_venue_df)
 
 #%%
-mean_venue_df = mean_venue_df[mean_venue_df['Bibtex Venue Name'].isin(top_20_venue)]
-mean_venue_df.reset_index(drop=True, inplace=True)
-print(mean_venue_df)
+mean_venue20_df = mean_venue_df[mean_venue_df['Bibtex Venue Name'].isin(top_20_venue)]
+mean_venue20_df.reset_index(drop=True, inplace=True)
+print(mean_venue20_df)
 
 #%%
-mean_venue_df['Bibtex Venue Name']= mean_venue_df['Bibtex Venue Name'].astype("category")
-mean_venue_df['Bibtex Venue Name'].cat.set_categories(top_20_venue, inplace=True)
-print(mean_venue_df['Bibtex Venue Name'])
-mean_venue_df = mean_venue_df.sort_values(['Bibtex Venue Name'])
-mean_venue_df.reset_index(drop=True, inplace=True)
-print(mean_venue_df)
+mean_venue20_df['Bibtex Venue Name']= mean_venue20_df['Bibtex Venue Name'].astype("category")
+mean_venue20_df['Bibtex Venue Name'].cat.set_categories(top_20_venue, inplace=True)
+print(mean_venue20_df['Bibtex Venue Name'])
+mean_venue20_df = mean_venue20_df.sort_values(['Bibtex Venue Name'])
+mean_venue20_df.reset_index(drop=True, inplace=True)
+print(mean_venue20_df)
+
+
+#%%
+
+
+#%%
+with open('mean_year_v.tsv', 'wt') as out_file:
+    tsv_writer = csv.writer(out_file, delimiter='\t')
+    for vector in mean_year_df[0]:
+      tsv_writer.writerow(vector)
+
+with open('meta_year.tsv', 'wt') as out_file:
+    tsv_writer = csv.writer(out_file, delimiter='\t')
+    for meta in  mean_year_df["Year"]:
+      tsv_writer.writerow([meta])
+
+# %%
+
+with open('mean_venue_all_v.tsv', 'wt') as out_file:
+    tsv_writer = csv.writer(out_file, delimiter='\t')
+    for vector in mean_venue_df[0]:
+        tsv_writer.writerow(vector)
+
+count = 0 
+with open('meta_venue_all.tsv', 'wt',encoding="utf-8") as out_file:
+    tsv_writer = csv.writer(out_file, delimiter='\t')
+    for meta in  mean_venue_df['Bibtex Venue Name']:
+        # meta = ''.join(x for x in meta if x.isprintable())
+        meta = meta.strip('\n')
+        tsv_writer.writerow([meta])
+
+
+#%%
+
+ 
+with open("..//dataverz//mean_year_df.csv",'r', encoding='utf-8') as csvin, open("../mean_year_df.tsv", 'w', newline='', encoding='utf-8') as tsvout:
+    csvin = csv.reader(csvin)
+    tsvout = csv.writer(tsvout, delimiter='\t')
+ 
+    for row in csvin:
+        tsvout.writerow(row)
 
 #Classification
 #%%
 X_train, X_test, Y_train, Y_test = train_test_split(doc_vectors_array, data['Normalized Citation Class'], test_size=0.4, random_state=123)
+
 
 #%%
 print(X_train.shape)
@@ -326,11 +378,55 @@ logreg = linear_model.LogisticRegression()
 logreg.fit(X_train, Y_train)
 predictions = logreg.predict(X_test)
 
+
 #%%
 print("Accuracy Score \n",accuracy_score(Y_test, predictions),"\n")
 print("Confusion Matrix \n",confusion_matrix(Y_test, predictions),"\n")
 print("Classification Report \n",classification_report(Y_test, predictions),"\n\n")
 
+#%%
+test_results = pd.DataFrame(columns=['Row', 'Prediction Label', 'True Label'])
+for i, (row_index, input, prediction, label) in enumerate(zip (Y_test.index.values, X_test, predictions, Y_test)):
+    test_results = test_results.append({'Row':row_index, 'Prediction Label':prediction, 'True Label': label}, ignore_index=True)
+# #   if prediction != label:
+    # print('Row', row_index, 'has been classified as ', prediction, 'and should be ', label)
+#
+#%%
+test_results = test_results.sort_values(by=['Row'])
+test_results = test_results.set_index('Row')
+
+test_results
+
+#%%
+df3 = pd.merge(data, test_results, left_index=True, right_index=True)
+df3
+
+#%%
+df3.to_csv('test results.csv', index=False)
+#%%
+
+
+class_names = ["high","low","medium"]
+
+np.set_printoptions(precision=2)
+
+# Plot non-normalized confusion matrix
+titles_options = [("Confusion matrix, without normalization", None),
+                  ("Normalized confusion matrix", 'true')]
+for title, normalize in titles_options:
+    disp = plot_confusion_matrix(logreg, X_test, Y_test,
+                                 display_labels=class_names,
+                                 cmap=plt.cm.Blues,
+                                 normalize=normalize)
+    disp.ax_.set_title(title)
+
+    print(title)
+    print(disp.confusion_matrix)
+
+plt.show()
+
+#%%
+print(predictions)
 
 #Regression
 #%%
@@ -343,9 +439,11 @@ regr.fit(X_train, Y_train)
 y_pred = regr.predict(X_test)
 # %%
 # %%
-print('Coefficients: \n', regr.coef_)
+# print('Coefficients: \n', regr.coef_)
 print('Mean squared error: %.2f' % mean_squared_error(Y_test, y_pred))
 
 # The coefficient of determination: 1 is perfect prediction
 print('Coefficient of determination: %.2f' % r2_score(Y_test, y_pred))
 
+
+# %%
